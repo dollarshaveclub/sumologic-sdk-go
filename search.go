@@ -37,6 +37,7 @@ type SearchJob struct {
 	ID      string `json:"id,omitempty"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Cookies []*http.Cookie
 }
 
 // StartSearch calls the Sumologic API Search Endpoint.
@@ -48,6 +49,7 @@ func (c *Client) StartSearch(ssr StartSearchRequest) (*SearchJob, error) {
 	url := c.EndpointURL.ResolveReference(relativeURL)
 
 	req, err := http.NewRequest("POST", url.String(), bytes.NewBuffer(body))
+	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "Basic "+c.AuthToken)
 
 	client := &http.Client{}
@@ -62,14 +64,23 @@ func (c *Client) StartSearch(ssr StartSearchRequest) (*SearchJob, error) {
 	switch resp.StatusCode {
 	case http.StatusAccepted:
 		var sj = new(SearchJob)
+
 		err = json.Unmarshal(responseBody, &sj)
 		if err != nil {
 			return nil, err
 		}
+		sj.Cookies = resp.Cookies()
 		return sj, nil
 	case http.StatusUnauthorized:
 		return nil, ErrClientAuthenticationError
+	case http.StatusBadRequest:
+		var sj = new(SearchJob)
+		err = json.Unmarshal(responseBody, &sj)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("Start SearchJob BadRequest, %v, %v", sj.Code, sj.Message)
 	default:
-		return nil, fmt.Errorf("unexecpted http status code %v", resp.StatusCode)
+		return nil, fmt.Errorf("unexepected http status code %v", resp.StatusCode)
 	}
 }
