@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 )
 
 // https://help.sumologic.com/APIs/Search-Job-API/About-the-Search-Job-API#Creating_a_search_job
@@ -52,9 +51,9 @@ var SearchJobStates = map[string]string{
 
 // HistogramBucket corresponds to the histogram display in the Sumo Logic interactive analytics API.
 type HistogramBucket struct {
-	Length         int       `json:"length"`
-	Count          int       `json:"count"`
-	StartTimeStamp time.Time `json:"startTimeStamp"`
+	Length         int `json:"length"`
+	Count          int `json:"count"`
+	StartTimeStamp int `json:"startTimeStamp"`
 }
 
 // StartSearch calls the Sumologic API Search Endpoint.
