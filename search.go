@@ -3,15 +3,15 @@ package sumologic
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
-//https://help.sumologic.com/APIs/Search-Job-API/About-the-Search-Job-API#Creating_a_search_job
+// https://help.sumologic.com/APIs/Search-Job-API/About-the-Search-Job-API#Creating_a_search_job
 // TLDR;
 // Rate Limit 240 rpm
 // use ISO 8601 for time ranges
@@ -39,7 +39,6 @@ type SearchJob struct {
 	ID      string `json:"id,omitempty"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
-	Cookies []*http.Cookie
 }
 
 // SearchJobStates are the different states a search job can be in.
@@ -87,7 +86,7 @@ func (c *Client) StartSearch(ssr StartSearchRequest) (*SearchJob, error) {
 		if err != nil {
 			return nil, err
 		}
-		sj.Cookies = resp.Cookies()
+		c.Cookies = resp.Cookies()
 		return sj, nil
 	case http.StatusUnauthorized:
 		return nil, ErrClientAuthenticationError
@@ -105,9 +104,9 @@ func (c *Client) StartSearch(ssr StartSearchRequest) (*SearchJob, error) {
 
 // SearchJobStatusRequest is a wrapper for the search job status params.
 type SearchJobStatusRequest struct {
-	SearchJobID string `json:"searchJobId"`
-	Offset      int    `json:"offset"`
-	Limit       int    `json:"limit"`
+	ID     string `json:"searchJobId"`
+	Offset int    `json:"offset"`
+	Limit  int    `json:"limit"`
 }
 
 // SearchJobStatusResponse stores the response from getting a search status.
@@ -117,10 +116,43 @@ type SearchJobStatusResponse struct {
 	HistgramBuckets []*HistogramBucket `json:"histogramBuckets"`
 	RecordCount     int                `json:"recordCount"`
 	PendingWarnings []string           `json:"pendingWarnings"`
-	PendingErrors   []string           `json:"pendingErrors`
+	PendingErrors   []string           `json:"pendingErrors"`
 }
 
 // GetSearchJobStatus retrieves the status of a running job.
-func (c *Client) GetSearchJobStatus(params SearchJobStatusRequest) (*SearchJobStatusResponse, error) {
-	return nil, errors.New("Not Implemented")
+func (c *Client) GetSearchJobStatus(sjsr SearchJobStatusRequest) (*SearchJobStatusResponse, error) {
+
+	relativeURL, _ := url.Parse(fmt.Sprintf("search/jobs/%s", sjsr.ID))
+	url := c.EndpointURL.ResolveReference(relativeURL)
+	req, err := http.NewRequest("GET", url.String(), nil)
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Basic "+c.AuthToken)
+	for _, v := range c.Cookies {
+		req.AddCookie(v)
+	}
+	q := req.URL.Query()
+	q.Add("offset", strconv.Itoa(sjsr.Offset))
+	q.Add("limit", strconv.Itoa(sjsr.Limit))
+	req.URL.RawQuery = q.Encode()
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	responseBody, _ := ioutil.ReadAll(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		var jobStatus = new(SearchJobStatusResponse)
+		err = json.Unmarshal(responseBody, &jobStatus)
+		if err != nil {
+			return nil, err
+		}
+		return jobStatus, nil
+	default:
+		return nil, fmt.Errorf("Status not OK : %v", resp.StatusCode)
+	}
 }

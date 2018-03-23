@@ -3,6 +3,7 @@ package sumologic
 
 import (
 	"errors"
+	"net/http"
 	"net/url"
 )
 
@@ -10,6 +11,7 @@ import (
 type Client struct {
 	AuthToken   string
 	EndpointURL *url.URL
+	Cookies     []*http.Cookie
 }
 
 // ErrClientAuthenticationError is returned for authentication errors with the API.

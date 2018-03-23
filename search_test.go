@@ -60,9 +60,9 @@ func TestGetSearchStatus(t *testing.T) {
 		ID: "testsearchjob",
 	}
 	testSearchJobStatusRequest := SearchJobStatusRequest{
-		SearchJobID: testSearchJob.ID,
-		Offset:      0,
-		Limit:       100,
+		ID:     testSearchJob.ID,
+		Offset: 0,
+		Limit:  100,
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
