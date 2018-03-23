@@ -42,7 +42,7 @@ func TestStartSearch(t *testing.T) {
 		return
 	}
 
-	startSearchResponse, err := c.StartSearch(testStartSearch)
+	startSearchResponse, _, err := c.StartSearch(testStartSearch)
 	if err != nil {
 		t.Errorf("StartSearch() returned an error: %s", err)
 		return
@@ -58,11 +58,6 @@ func TestGetSearchStatus(t *testing.T) {
 	// req.Header.Set("Cookie", "name=xxxx; count=x")
 	testSearchJob := SearchJob{
 		ID: "testsearchjob",
-	}
-	testSearchJobStatusRequest := SearchJobStatusRequest{
-		ID:     testSearchJob.ID,
-		Offset: 0,
-		Limit:  100,
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -86,8 +81,8 @@ func TestGetSearchStatus(t *testing.T) {
 		t.Errorf("NewClient() returned an error: %s", err)
 		return
 	}
-
-	_, err = c.GetSearchJobStatus(testSearchJobStatusRequest)
+	var cookies []*http.Cookie
+	_, err = c.GetSearchJobStatus(testSearchJob.ID, cookies)
 	if err != nil {
 		t.Errorf("GetSearchJobStatus() returned an error: %s", err)
 		return

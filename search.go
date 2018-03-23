@@ -3,11 +3,11 @@ package sumologic
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strconv"
 )
 
 // https://help.sumologic.com/APIs/Search-Job-API/About-the-Search-Job-API#Creating_a_search_job
@@ -49,16 +49,9 @@ var SearchJobStates = map[string]string{
 	"CANCELED":               "The search job has been canceled.",
 }
 
-// HistogramBucket corresponds to the histogram display in the Sumo Logic interactive analytics API.
-type HistogramBucket struct {
-	Length         int `json:"length"`
-	Count          int `json:"count"`
-	StartTimeStamp int `json:"startTimeStamp"`
-}
-
 // StartSearch calls the Sumologic API Search Endpoint.
 // POST search/jobs
-func (c *Client) StartSearch(ssr StartSearchRequest) (*SearchJob, error) {
+func (c *Client) StartSearch(ssr StartSearchRequest) (*SearchJob, []*http.Cookie, error) {
 	body, _ := json.Marshal(ssr)
 
 	relativeURL, _ := url.Parse("search/jobs")
@@ -71,7 +64,7 @@ func (c *Client) StartSearch(ssr StartSearchRequest) (*SearchJob, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 
@@ -83,29 +76,29 @@ func (c *Client) StartSearch(ssr StartSearchRequest) (*SearchJob, error) {
 
 		err = json.Unmarshal(responseBody, &sj)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		c.Cookies = resp.Cookies()
-		return sj, nil
+		cookies := resp.Cookies()
+		return sj, cookies, nil
 	case http.StatusUnauthorized:
-		return nil, ErrClientAuthenticationError
+		return nil, nil, ErrClientAuthenticationError
 	case http.StatusBadRequest:
 		var sj = new(SearchJob)
 		err = json.Unmarshal(responseBody, &sj)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return nil, fmt.Errorf("Start SearchJob BadRequest, %v, %v", sj.Code, sj.Message)
+		return nil, nil, fmt.Errorf("Start SearchJob BadRequest, %v, %v", sj.Code, sj.Message)
 	default:
-		return nil, fmt.Errorf("unexepected http status code %v", resp.StatusCode)
+		return nil, nil, fmt.Errorf("unexepected http status code %v", resp.StatusCode)
 	}
 }
 
-// SearchJobStatusRequest is a wrapper for the search job status params.
-type SearchJobStatusRequest struct {
-	ID     string `json:"searchJobId"`
-	Offset int    `json:"offset"`
-	Limit  int    `json:"limit"`
+// HistogramBucket corresponds to the histogram display in the Sumo Logic interactive analytics API.
+type HistogramBucket struct {
+	Length         int `json:"length"`
+	Count          int `json:"count"`
+	StartTimeStamp int `json:"startTimeStamp"`
 }
 
 // SearchJobStatusResponse stores the response from getting a search status.
@@ -119,20 +112,16 @@ type SearchJobStatusResponse struct {
 }
 
 // GetSearchJobStatus retrieves the status of a running job.
-func (c *Client) GetSearchJobStatus(sjsr SearchJobStatusRequest) (*SearchJobStatusResponse, error) {
+func (c *Client) GetSearchJobStatus(searchJobID string, cookies []*http.Cookie) (*SearchJobStatusResponse, error) {
 
-	relativeURL, _ := url.Parse(fmt.Sprintf("search/jobs/%s", sjsr.ID))
+	relativeURL, _ := url.Parse(fmt.Sprintf("search/jobs/%s", searchJobID))
 	url := c.EndpointURL.ResolveReference(relativeURL)
 	req, err := http.NewRequest("GET", url.String(), nil)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "Basic "+c.AuthToken)
-	for _, v := range c.Cookies {
+	for _, v := range cookies {
 		req.AddCookie(v)
 	}
-	q := req.URL.Query()
-	q.Add("offset", strconv.Itoa(sjsr.Offset))
-	q.Add("limit", strconv.Itoa(sjsr.Limit))
-	req.URL.RawQuery = q.Encode()
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -154,4 +143,31 @@ func (c *Client) GetSearchJobStatus(sjsr SearchJobStatusRequest) (*SearchJobStat
 	default:
 		return nil, fmt.Errorf("Status not OK : %v", resp.StatusCode)
 	}
+}
+
+// SearchJobResultsRequest is a wrapper for the search job messages params.
+type SearchJobResultsRequest struct {
+	ID     string `json:"searchJobId"`
+	Offset int    `json:"offset"`
+	Limit  int    `json:"limit"`
+}
+
+// SearchJobResultField is one field from a search result.
+type SearchJobResultField struct {
+	Name      string `json:"name"`
+	FieldType string `json:"fieldType"`
+	KeyField  bool   `json:"keyField"`
+}
+
+// SearchJobResult represents a search job result
+type SearchJobResult struct {
+}
+
+// GetSearchResults will retrieve the messages from a finished search job.
+func (c *Client) GetSearchResults(sjmr SearchJobResultsRequest) (*SearchJobResult, error) {
+	// q := req.URL.Query()
+	// q.Add("offset", strconv.Itoa(sjsr.Offset))
+	// q.Add("limit", strconv.Itoa(sjsr.Limit))
+	// req.URL.RawQuery = q.Encode()
+	return nil, errors.New("Not Implemented")
 }
