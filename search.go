@@ -3,11 +3,11 @@ package sumologic
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 // https://help.sumologic.com/APIs/Search-Job-API/About-the-Search-Job-API#Creating_a_search_job
@@ -159,15 +159,55 @@ type SearchJobResultField struct {
 	KeyField  bool   `json:"keyField"`
 }
 
+// SearchJobResultMessage represents one message from a search job result.
+type SearchJobResultMessage struct {
+	// not 100% sure about this or if it should be map[string]interface{}, map[string]string or completely different approach.
+	// Depending on the origin of the log, the structure of this may vary.
+	// The thought is apps including this package will define a struct for the specific message types
+	// and parse the _raw field into that struct of for the app's use case.
+	Map map[string]interface{} `json:"map"`
+}
+
 // SearchJobResult represents a search job result
 type SearchJobResult struct {
+	Fields   []*SearchJobResultField   `json:"fields"`
+	Messages []*SearchJobResultMessage `json:"messages"`
 }
 
 // GetSearchResults will retrieve the messages from a finished search job.
-func (c *Client) GetSearchResults(sjmr SearchJobResultsRequest) (*SearchJobResult, error) {
-	// q := req.URL.Query()
-	// q.Add("offset", strconv.Itoa(sjsr.Offset))
-	// q.Add("limit", strconv.Itoa(sjsr.Limit))
-	// req.URL.RawQuery = q.Encode()
-	return nil, errors.New("Not Implemented")
+func (c *Client) GetSearchResults(sjrr SearchJobResultsRequest, cookies []*http.Cookie) (*SearchJobResult, error) {
+	relativeURL, _ := url.Parse(fmt.Sprintf("search/jobs/%s/messages", sjrr.ID))
+	url := c.EndpointURL.ResolveReference(relativeURL)
+	req, err := http.NewRequest("GET", url.String(), nil)
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Basic "+c.AuthToken)
+	for _, v := range cookies {
+		req.AddCookie(v)
+	}
+	q := req.URL.Query()
+	q.Add("offset", strconv.Itoa(sjrr.Offset))
+	q.Add("limit", strconv.Itoa(sjrr.Limit))
+	req.URL.RawQuery = q.Encode()
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	responseBody, _ := ioutil.ReadAll(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		var searchResult = new(SearchJobResult)
+		err = json.Unmarshal(responseBody, &searchResult)
+		if err != nil {
+			return nil, err
+		}
+		return searchResult, nil
+	default:
+		return nil, fmt.Errorf("Status not OK : %v", resp.StatusCode)
+	}
+
 }
